@@ -64,3 +64,54 @@ class EpsilonGreedyAgent:
         state, hist = vmap_returns(keys, data, storefn)
         return state, hist
     
+
+class TabularEpsilonGreedyAgent:
+    def __init__(self, epsilon, alpha = 0.0):
+        self.epsilon = epsilon
+        self.alpha = alpha
+
+    def init(self, key, n_arms, n_options):
+        """
+        Parameters
+        key: jax.random.PRNGKey
+        n_arms: int
+            Number of arms
+        n_options: int
+            Number of states (contexts) per arm
+        """
+        shape = (*(n_options,) * n_arms, n_arms)
+        value_v = jnp.zeros(shape)
+        state = BanditState(value=value_v, count=value_v, key=key)
+        return state
+
+    def _step(self, state, xs, storefn):
+        rewards, context = xs
+        context = tuple(context)
+        key_choice, key_arm = jax.random.split(state.key)
+
+        is_greedy = jax.random.bernoulli(key_choice, p=1-self.epsilon)
+        n_bandits = state.value.shape[-1]
+        random_choice = jax.random.choice(key_arm, n_bandits)
+        
+        action = state.value[context].argmax() * is_greedy + random_choice * (1 - is_greedy) 
+        reward = rewards[action]
+
+        update_ix = tuple((*context, action))
+        new_count = state.count[update_ix] + 1
+        discount = (1 / new_count) * (self.alpha == 0.0) + self.alpha
+        new_value = state.value[update_ix] + discount * (reward - state.value[update_ix])
+
+        state = state.update(update_ix, new_value, new_count)
+        carry = storefn(state, action, reward)
+        
+        return state, carry 
+
+
+    @partial(jax.jit, static_argnames=("self", "storefn",))
+    def init_and_run(self, key, rewards, contexts, storefn):
+        xs = (rewards, contexts)
+        state = self.init(key, rewards.shape[1], n_options=2)
+
+        partial_step = partial(self._step,  storefn=storefn)
+        state, hist = jax.lax.scan(partial_step, state, xs)
+        return state, hist
