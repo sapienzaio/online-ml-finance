@@ -64,19 +64,3 @@ class EpsilonGreedyAgent:
         state, hist = vmap_returns(keys, data, storefn)
         return state, hist
     
-
-
-
-@partial(jax.jit, static_argnames=("n_sims", "storefn"))
-def run_bandit_sims(key, data, epsilon, alpha, n_sims, storefn):
-    keys = jax.random.split(key, n_sims)
-    
-    vmap_returns = jax.vmap(run_bandit, in_axes=(0, None, None, None, None))
-    _, hist = vmap_returns(keys, data, epsilon, alpha, storefn)
-    return hist
-
-
-@partial(jax.jit, static_argnames=("n_sims",))
-@partial(jax.vmap, in_axes=(None, None, 0, None, None))
-def run_bandit_sims_eps(key, data, epsilon_v, alpha, n_sims):
-    return run_bandit_sims(key, data, epsilon_v, alpha, n_sims, store_reward)
