@@ -116,3 +116,11 @@ class TabularEpsilonGreedyAgent:
         partial_step = partial(self._step,  storefn=storefn)
         state, hist = jax.lax.scan(partial_step, state, xs)
         return state, hist
+
+
+    @partial(jax.jit, static_argnames=("self", "storefn", "n_sims"))
+    def init_and_run_sims(self, key, rewards, context, storefn, n_sims):
+        keys = jax.random.split(key, n_sims)
+        vmap_returns = jax.vmap(self.init_and_run, in_axes=(0, None, None, None))
+        state, hist = vmap_returns(keys, rewards, context, storefn)
+        return state, hist
